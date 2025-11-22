@@ -3,6 +3,7 @@ from numpy.typing import ArrayLike
 
 from simulator import RaceTrack
 
+min_index = 0
 integral = 0
 prev_heading_error = 0
 
@@ -36,16 +37,19 @@ def lower_controller(
 def controller(
     state : ArrayLike, parameters : ArrayLike, racetrack : RaceTrack
 ) -> ArrayLike:
+    global integral, prev_heading_error, min_index
+    
     # responsible for computing desired values (steering angle, velocity) from current state
     dt = 1e-1 # this is the sampling period
     
     # current state
     sx, sy, delta, v, phi = state
 
-    # desired steering angle
     current_pos = np.array([sx, sy])
     distances = np.linalg.norm(racetrack.centerline - current_pos, axis=1)
-    closest_idx = np.argmin(distances)
+    closest_idx = max(min_index, np.argmin(distances))
+    
+    min_index = closest_idx
 
     print(f"State: sx={sx:.2f}, sy={sy:.2f}, v={v:.2f}, delta={delta:.2f}, phi={phi:.2f}")
     
@@ -59,7 +63,9 @@ def controller(
     min_velocity = parameters[2]
     max_velocity = parameters[5]
 
-    vr = -((max_velocity - min_velocity) / max_steering_angle) * abs(delta) + max_velocity # linear interpolation
+    vr = 25 # linear interpolation
+    
+    # vr = -((max_velocity - min_velocity) / max_steering_angle) * abs(delta) + max_velocity # linear interpolation
     
     # calculate desired heading to reach target point
     dx = target_point[0] - sx
@@ -72,24 +78,22 @@ def controller(
     # normalize (wrap between [-pi, pi])
     heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
     
-
+    # desired steering angle
     lwb = parameters[0] # wheelbase
 
     Kp = 0.5  # kp
-    Ki = 0.1
-    Kd = 0.02
+    Ki = 0.0
+    Kd = 0.1
 
-    global integral
     integral += heading_error * dt
 
     controller_transfer_fun = Kp + (Ki * integral) + (Kd * (heading_error - prev_heading_error) / dt)
-    delta_r = (controller_transfer_fun * heading_error * lwb) / (max(vr, 0.1) * dt)
+    delta_r = (controller_transfer_fun * heading_error * lwb) / (max(vr, 0.001) * dt)
 
-    global prev_heading_error
     prev_heading_error = heading_error
 
     # clip steering angle rate
-    delta_r = np.clip(delta_r, -0.9, 0.9)
+    delta_r = np.clip(delta_r, min_steering_angle, max_steering_angle)
     # print(f"Parameters: {parameters[1]}, {parameters[4]}")
 
     print(f"Closest: {closest_idx}, Target: {lookahead_idx}")
