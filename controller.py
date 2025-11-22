@@ -81,8 +81,12 @@ def controller(
 
     global integral
     integral += heading_error * dt
+
     controller_transfer_fun = Kp + (Ki * integral) + (Kd * (heading_error - prev_heading_error) / dt)
     delta_r = (controller_transfer_fun * heading_error * lwb) / (max(vr, 0.1) * dt)
+
+    global prev_heading_error
+    prev_heading_error = heading_error
 
     # clip steering angle rate
     delta_r = np.clip(delta_r, -0.9, 0.9)
