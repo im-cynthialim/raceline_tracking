@@ -3,6 +3,9 @@ from numpy.typing import ArrayLike
 
 from simulator import RaceTrack
 
+integral = 0
+prev_heading_error = 0
+
 def lower_controller(
     state : ArrayLike, desired : ArrayLike, parameters : ArrayLike
 ) -> ArrayLike:
@@ -10,20 +13,23 @@ def lower_controller(
 
     sx, sy, delta, v, phi = state
     delta_r, vr = desired
+
+    min_steering_velocity = parameters[7]
+    max_steering_velocity = parameters[9]
     
     # find difference between desired and current
     delta_error = delta_r - delta
     Kp_delta = 4.0
     v_delta = Kp_delta * delta_error
-    v_delta = np.clip(v_delta, -20.0, 20.0)
+    v_delta = np.clip(v_delta, min_steering_velocity, max_steering_velocity)
     
     # calculate acceleration
-    # min_accel = parameters[8]
-    # max_accel = parameters[10]
+    min_accel = parameters[8]
+    max_accel = parameters[10]
     v_error = vr - v
     Kp_v = 2.0
     a = Kp_v * v_error
-    a = np.clip(a, -10, 10)
+    a = np.clip(a, min_accel, max_accel)
 
     return np.array([v_delta, a]).T
 
@@ -31,6 +37,7 @@ def controller(
     state : ArrayLike, parameters : ArrayLike, racetrack : RaceTrack
 ) -> ArrayLike:
     # responsible for computing desired values (steering angle, velocity) from current state
+    dt = 1e-1 # this is the sampling period
     
     # current state
     sx, sy, delta, v, phi = state
@@ -64,12 +71,18 @@ def controller(
     
     # normalize (wrap between [-pi, pi])
     heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
+    
 
     lwb = parameters[0] # wheelbase
 
     Kp = 0.5  # kp
-    sampling_period = 1e-1
-    delta_r = (Kp * heading_error * lwb) / max(vr, 0.1) / sampling_period
+    Ki = 0.1
+    Kd = 0.02
+
+    global integral
+    integral += heading_error * dt
+    controller_transfer_fun = Kp + (Ki * integral) + (Kd * (heading_error - prev_heading_error) / dt)
+    delta_r = (controller_transfer_fun * heading_error * lwb) / (max(vr, 0.1) * dt)
 
     # clip steering angle rate
     delta_r = np.clip(delta_r, -0.9, 0.9)
