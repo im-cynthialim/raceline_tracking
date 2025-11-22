@@ -18,6 +18,8 @@ def lower_controller(
     v_delta = np.clip(v_delta, -20.0, 20.0)
     
     # calculate acceleration
+    # min_accel = parameters[8]
+    # max_accel = parameters[10]
     v_error = vr - v
     Kp_v = 2.0
     a = Kp_v * v_error
@@ -32,9 +34,6 @@ def controller(
     
     # current state
     sx, sy, delta, v, phi = state
-    
-    # desired velocity 
-    vr = 25.0  # constant for now
 
     # desired steering angle
     current_pos = np.array([sx, sy])
@@ -46,6 +45,14 @@ def controller(
     # lookahead by 5 points
     lookahead_idx = (closest_idx + 5) % len(racetrack.centerline)
     target_point = racetrack.centerline[lookahead_idx]
+
+    # desired velocity (based on delta_r)
+    min_steering_angle = parameters[1]
+    max_steering_angle = parameters[4]
+    min_velocity = parameters[2]
+    max_velocity = parameters[5]
+
+    vr = -((max_velocity - min_velocity) / max_steering_angle) * abs(delta) + max_velocity # linear interpolation
     
     # calculate desired heading to reach target point
     dx = target_point[0] - sx
@@ -55,13 +62,14 @@ def controller(
     # heading difference
     heading_error = desired_heading - phi
     
-    # normalize
+    # normalize (wrap between [-pi, pi])
     heading_error = np.arctan2(np.sin(heading_error), np.cos(heading_error))
 
     lwb = parameters[0] # wheelbase
 
     Kp = 0.5  # kp
-    delta_r = (Kp * heading_error * lwb) / max(vr, 0.1)
+    sampling_period = 1e-1
+    delta_r = (Kp * heading_error * lwb) / max(vr, 0.1) / sampling_period
 
     # clip steering angle rate
     delta_r = np.clip(delta_r, -0.9, 0.9)
