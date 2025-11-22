@@ -46,17 +46,17 @@ class RaceCar:
 
         # Parameter packing
         self.parameters = np.array([
-            self.wheelbase, # Car Wheelbase
-            -self.max_steering_angle, # x3
-            self.min_velocity, # x4
-            -np.pi, # x5
-            self.max_steering_angle,
-            self.max_velocity,
-            np.pi,
-            -self.max_steering_vel, # u1
-            -self.max_acceleration, # u2
-            self.max_steering_vel,
-            self.max_acceleration
+            self.wheelbase, # Car Wheelbase 0
+            -self.max_steering_angle, # x3 1
+            self.min_velocity, # x4 2
+            -np.pi, # x5 3
+            self.max_steering_angle, # 4
+            self.max_velocity, # 5
+            np.pi, # 6
+            -self.max_steering_vel, # u1 7
+            -self.max_acceleration, # u2 8
+            self.max_steering_vel, # 9
+            self.max_acceleration # 10
         ])
 
         # States are specified in the associated documentation.
