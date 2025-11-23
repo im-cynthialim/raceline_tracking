@@ -3,6 +3,7 @@ from numpy.typing import ArrayLike
 
 from simulator import RaceTrack
 
+min_index = 0
 integral = 0
 prev_heading_error = 0
 
@@ -64,16 +65,19 @@ def lower_controller(
 def controller(
     state : ArrayLike, parameters : ArrayLike, racetrack : RaceTrack
 ) -> ArrayLike:
+    global integral, prev_heading_error, min_index
+    
     # responsible for computing desired values (steering angle, velocity) from current state
     dt = 1e-1 # this is the sampling period
     
     # current state
     sx, sy, delta, v, phi = state
 
-    # desired steering angle
     current_pos = np.array([sx, sy])
     distances = np.linalg.norm(racetrack.centerline - current_pos, axis=1)
-    closest_idx = np.argmin(distances)
+    closest_idx = max(min_index, np.argmin(distances))
+    
+    min_index = closest_idx
 
     print(f"State: sx={sx:.2f}, sy={sy:.2f}, v={v:.2f}, delta={delta:.2f}, phi={phi:.2f}")
     
