@@ -3,13 +3,18 @@ import numpy as np
 import matplotlib.path as path
 import matplotlib.patches as patches
 import matplotlib.axes as axes
+from scipy.interpolate import CubicSpline
 
 class RaceTrack:
 
-    def __init__(self, filepath : str):
+    def __init__(self, filepath : str, raceline_path : str):
         data = np.loadtxt(filepath, comments="#", delimiter=",")
         self.centerline = data[:, 0:2]
         self.centerline = np.vstack((self.centerline[-1], self.centerline, self.centerline[0]))
+
+        raceline_data = np.loadtxt(raceline_path, comments="#", delimiter=",")
+        self.raceline = raceline_data[:, 0:2]
+        self.raceline = np.vstack((self.raceline[-1], self.raceline, self.raceline[0]))
 
         centerline_gradient = np.gradient(self.centerline, axis=0)
         # Unfortunate Warning Print: https://github.com/numpy/numpy/issues/26620
@@ -52,7 +57,32 @@ class RaceTrack:
         self.mpl_right_track_limit_patch = patches.PathPatch(self.mpl_right_track_limit, linestyle="--", fill=False, lw=0.2)
         self.mpl_left_track_limit_patch = patches.PathPatch(self.mpl_left_track_limit, linestyle="--", fill=False, lw=0.2)
 
+        # interpolate
+        self.interpolate_raceline()
+
     def plot_track(self, axis : axes.Axes):
         axis.add_patch(self.mpl_centerline_patch)
         axis.add_patch(self.mpl_right_track_limit_patch)
         axis.add_patch(self.mpl_left_track_limit_patch)
+
+    def interpolate_raceline(self, spacing=0.1):
+        pts = np.array(self.raceline)
+
+        # If endpoints are different, close the loop manually
+        if not np.allclose(pts[0], pts[-1]):
+            pts = np.vstack([pts, pts[0]])
+
+        # --- 1. arc-length ---
+        d = np.linalg.norm(pts[1:] - pts[:-1], axis=1)
+        s = np.concatenate(([0], np.cumsum(d)))
+
+        # --- 2. periodic splines ---
+        sx = CubicSpline(s, pts[:, 0], bc_type='periodic')
+        sy = CubicSpline(s, pts[:, 1], bc_type='periodic')
+
+        # --- 3. uniform sampling ---
+        s_new = np.arange(0, s[-1], spacing)
+        x_new = sx(s_new)
+        y_new = sy(s_new)
+
+        self.raceline = np.column_stack((x_new, y_new))
