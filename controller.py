@@ -73,12 +73,6 @@ def controller(
     # current state
     sx, sy, delta, v, phi = state
 
-    current_pos = np.array([sx, sy])
-    distances = np.linalg.norm(racetrack.centerline - current_pos, axis=1)
-    closest_idx = max(min_index, np.argmin(distances))
-    
-    min_index = closest_idx
-
     print(f"State: sx={sx:.2f}, sy={sy:.2f}, v={v:.2f}, delta={delta:.2f}, phi={phi:.2f}")
     
     # lookahead by 5 points
@@ -90,14 +84,16 @@ def controller(
     # max_steering_angle = parameters[4]
     min_velocity = parameters[2]
     max_velocity = parameters[5]
+    lwb = parameters[0] # wheelbase
 
     # vr = -((max_velocity - min_velocity) / max_steering_angle) * abs(delta) + max_velocity # linear interpolation
     # vr = 25.0
     # vr.clip(min_velocity, max_velocity)
 
-    Ld_min = 1.5  # min lookahead
+    Ld_min = 4.0  # min lookahead
     k = 0.3 # scaling factor
-    Ld = Ld_min + k * abs(v)  # dynamic lookahead
+    # Ld = Ld_min + k * abs(v)  # dynamic lookahead
+    Ld = max(Ld_min, k * abs(v))
     
     print(f"Velocity: {v:.2f}, Lookahead distance: {Ld:.2f}m")
     
@@ -105,6 +101,9 @@ def controller(
     current_pos = np.array([sx, sy])
     distances = np.linalg.norm(racetrack.centerline - current_pos, axis=1)
     closest_idx = np.argmin(distances)
+
+    # closest_idx = max(min_index, closest_idx) # make sure we don't go backwards
+    # min_index = closest_idx
     
     # Find target point at lookahead distance Ld
     target_idx = find_lookahead_point(
@@ -144,26 +143,74 @@ def controller(
     min_velocity = parameters[2]
     k_curvature = 100
     
-    vr = max_velocity / (1 + k_curvature * abs(curvature))
-    # vr = 50
+    # vr = max_velocity / (1 + k_curvature * abs(curvature))
+    vr = 50
     vr = np.clip(vr, min_velocity, max_velocity)
 
-    lwb = parameters[0] # wheelbase
+    # ----------------------------------------------------------------------------
+    K_E = 0.5
+    K_H = 0.7
 
-    Kp = 0.25
-    # Kp = 0.5 # kp
-    # Kd = 0.35 
-    Kd = 0.2
-    # Kd = 0
-    # Kp = 2.0
-    # Kd = 0.5
+    front_point_car = np.array([sx + np.cos(phi) * lwb, sy + np.sin(phi) * lwb])
+    rear_point_car = np.array([sx, sy])
 
-    global prev_heading_error
+    distances_front = np.linalg.norm(racetrack.centerline - front_point_car, axis=1)
+    distances_rear = np.linalg.norm(racetrack.centerline - rear_point_car, axis=1)
 
-    controller_transfer_fun = Kp * heading_error + (Kd * (heading_error - prev_heading_error) / dt)
-    delta_r = (controller_transfer_fun * lwb) / (max(vr * dt, 0.1)) 
+    closest_wheelbase_front_point_world = racetrack.centerline[np.argmin(distances_front)]
+
+    # convert from world space to car space
+    dx = closest_wheelbase_front_point_world[0] - front_point_car[0]
+    dy = closest_wheelbase_front_point_world[1] - front_point_car[1]
+    c = np.cos(phi)
+    s = np.sin(phi)
+    x_car =  c*dx + s*dy
+    y_car = -s*dx + c*dy
+    closest_wheelbase_front_point_car = np.array([x_car, y_car])
+
+    closest_wheelbase_rear_point = racetrack.centerline[np.argmin(distances_rear)]
+
+    path_heading = np.atan2(closest_wheelbase_front_point_world[1] - closest_wheelbase_rear_point[1], closest_wheelbase_front_point_world[0] - closest_wheelbase_rear_point[0])
+    current_heading = phi
     
-    prev_heading_error = heading_error
+    if current_heading < 0:
+        current_heading += 2 * np.pi
+    if path_heading < 0:
+        path_heading += 2 * np.pi
+
+    # calculate the errors
+    crosstrack_error = np.atan2(K_E * closest_wheelbase_front_point_car[1], vr) # y value in car frame
+    heading_error = path_heading - current_heading
+    if heading_error > np.pi:
+        heading_error -= 2 * np.pi
+    elif heading_error < - np.pi:
+        heading_error += 2 * np.pi
+
+    heading_error *= K_H
+
+    # Calculate the steering angle using the Stanley controller formula
+    delta_r = heading_error + crosstrack_error
+    # ----------------------------------------------------------------------------
+
+
+    # Kp = 0.25
+    # # Kp = 0.5 # kp
+    # # Kd = 0.35 
+    # Kd = 0.2
+    # # Kd = 0
+    # # Kp = 2.0
+    # # Kd = 0.5
+    # Ki = 0.0
+
+    # integral += heading_error * dt
+    # np.clip(integral, -5.0, 5.0)
+
+    # controller_transfer_fun = Kp * heading_error + (Kd * (heading_error - prev_heading_error) / dt + (Ki * integral))
+    # delta_r = (controller_transfer_fun * lwb) / (max(vr * dt, 0.1))
+    
+    # prev_heading_error = heading_error
+
+
 
     # clip steering angle rate
     delta_r = np.clip(delta_r, parameters[1], parameters[4])
