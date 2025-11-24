@@ -68,17 +68,17 @@ class RaceTrack:
     def interpolate_raceline(self, spacing=0.1):
         pts = np.array(self.raceline)
 
-        # If endpoints are different, close the loop manually
-        if not np.allclose(pts[0], pts[-1]):
-            pts = np.vstack([pts, pts[0]])
+        # # If endpoints are different, close the loop manually
+        # if not np.allclose(pts[0], pts[-1]):
+        #     pts = np.vstack([pts, pts[0]])
 
         # --- 1. arc-length ---
         d = np.linalg.norm(pts[1:] - pts[:-1], axis=1)
         s = np.concatenate(([0], np.cumsum(d)))
 
         # --- 2. periodic splines ---
-        sx = CubicSpline(s, pts[:, 0], bc_type='periodic')
-        sy = CubicSpline(s, pts[:, 1], bc_type='periodic')
+        sx = CubicSpline(s, pts[:, 0])
+        sy = CubicSpline(s, pts[:, 1])
 
         # --- 3. uniform sampling ---
         s_new = np.arange(0, s[-1], spacing)
