@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.path as path
 import matplotlib.patches as patches
 import matplotlib.axes as axes
-from scipy.interpolate import CubicSpline
+from pchip_interpolate import pchip_interpolate
 
 class RaceTrack:
 
@@ -32,14 +32,14 @@ class RaceTrack:
         self.right_boundary = self.centerline[:, :2] + centerline_norm[:, :2] * np.expand_dims(data[:, 2], axis=1)
         self.left_boundary = self.centerline[:, :2] - centerline_norm[:, :2]*np.expand_dims(data[:, 3], axis=1)
 
-        # Compute initial position and heading
+        # Compute initial position and heading (START ON RACELINE)
         self.initial_state = np.array([
-            self.centerline[0, 0],
-            self.centerline[0, 1],
+            self.raceline[0, 0],
+            self.raceline[0, 1],
             0.0, 0.0,
             np.arctan2(
-                self.centerline[1, 1] - self.centerline[0, 1], 
-                self.centerline[1, 0] - self.centerline[0, 0]
+                self.raceline[1, 1] - self.raceline[0, 1], 
+                self.raceline[1, 0] - self.raceline[0, 0]
             )
         ])
 
@@ -65,24 +65,26 @@ class RaceTrack:
         axis.add_patch(self.mpl_right_track_limit_patch)
         axis.add_patch(self.mpl_left_track_limit_patch)
 
-    def interpolate_raceline(self, spacing=0.1):
+    def interpolate_raceline(self, spacing=0.5):
         pts = np.array(self.raceline)
-
-        # # If endpoints are different, close the loop manually
-        # if not np.allclose(pts[0], pts[-1]):
-        #     pts = np.vstack([pts, pts[0]])
-
+        
         # --- 1. arc-length ---
         d = np.linalg.norm(pts[1:] - pts[:-1], axis=1)
         s = np.concatenate(([0], np.cumsum(d)))
 
-        # --- 2. periodic splines ---
-        sx = CubicSpline(s, pts[:, 0])
-        sy = CubicSpline(s, pts[:, 1])
-
+        # --- 2. Custom PCHIP Interpolation ---
+        # Call pchip_interpolate(xi, yi, x) where:
+        # xi = s (original arc-lengths)
+        # yi = pts[:, 0] or pts[:, 1] (original coordinates)
+        # x = s_new (new arc-length grid)
+        
         # --- 3. uniform sampling ---
         s_new = np.arange(0, s[-1], spacing)
-        x_new = sx(s_new)
-        y_new = sy(s_new)
+        
+        # Interpolate X-coordinates
+        x_new = pchip_interpolate(s, pts[:, 0], s_new)
+        
+        # Interpolate Y-coordinates
+        y_new = pchip_interpolate(s, pts[:, 1], s_new)
 
         self.raceline = np.column_stack((x_new, y_new))

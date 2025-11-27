@@ -22,6 +22,7 @@ class Simulator:
 
         self.car = RaceCar(self.rt.initial_state.T)
 
+        self.sim_time = 0
         self.lap_time_elapsed = 0
         self.lap_start_time = None
         self.lap_finished = False
@@ -68,6 +69,8 @@ class Simulator:
     def run(self):
         try:
             if self.lap_finished:
+                print("Lap completed in {:.2f} seconds with {} track violations.".format(
+                    self.lap_time_elapsed, self.track_limit_violations))
                 exit()
 
             self.figure.canvas.flush_events()
@@ -81,6 +84,10 @@ class Simulator:
             desired = controller(self.car.state, self.car.parameters, self.rt)
             cont = lower_controller(self.car.state, desired, self.car.parameters)
             self.car.update(cont)
+
+            # Increment simulation time by the car's timestep
+            self.sim_time += self.car.time_step
+
             self.update_status()
             self.check_track_limits()
 
@@ -108,6 +115,12 @@ class Simulator:
                 fontsize=8, color="Red"
             )
 
+            self.axis.text(
+                self.car.state[0] + 195, self.car.state[1] + 140, "Speed: " + str(round(self.car.state[3], 2)),
+                horizontalalignment="right", verticalalignment="top",
+                fontsize=8, color="Red"
+            )
+
             self.figure.canvas.draw()
             return True
 
@@ -120,12 +133,12 @@ class Simulator:
         if progress > 10.0 and not self.lap_started:
             self.lap_started = True
     
-        if progress <= 1.0 and self.lap_started and not self.lap_finished:
+        if progress <= 10.0 and self.lap_started and not self.lap_finished:
             self.lap_finished = True
-            self.lap_time_elapsed = time() - self.lap_start_time
+            self.lap_time_elapsed = self.sim_time
 
         if not self.lap_finished and self.lap_start_time is not None:
-            self.lap_time_elapsed = time() - self.lap_start_time
+            self.lap_time_elapsed = self.sim_time
 
     def start(self):
         # Run the simulation loop every 1 second.
